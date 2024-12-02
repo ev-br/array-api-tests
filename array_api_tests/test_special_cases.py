@@ -550,6 +550,8 @@ r_nan_signbit = re.compile(
     "the result is ``(.+)``"
 )
 
+r_complex_case = re.compile("If ``a`` is (.+) and ``b`` is (.+), the result is (.+).")
+
 
 def integers_from_dtype(dtype: DataType, **kw) -> st.SearchStrategy[float]:
     """
@@ -707,6 +709,14 @@ def parse_unary_case_block(case_block: str, func_name: str) -> List[UnaryCase]:
                 raw_case=case_str,
             )
             cases.append(case)
+        elif m:=r_complex_case.search(case_str):
+            try:
+#                breakpoint()
+                _check_result, result_expr = parse_result(m.group(2))
+                print(f"!!!! {func_name} {_check_result}, {result_expr}")
+            except ParseError as e:
+                print(f">>>> {func_name}: {e.value}")
+#            breakpoint()
         else:
             if not r_remaining_case.search(case_str):
                 warn(f"case for {func_name} not machine-readable: '{case_str}'")
@@ -1172,6 +1182,13 @@ for stub in category_to_funcs["elementwise"]:
         case_block = m.group(1)
     else:
         continue
+
+    if (
+        "For complex floating-point operands, let ``a = real(x_i)``, "
+        "``b = imag(x_i)``, and" in stub.__doc__
+    ):
+        has_complex_cases = True        
+
     marks = []
     try:
         func = getattr(xp, func_name)
