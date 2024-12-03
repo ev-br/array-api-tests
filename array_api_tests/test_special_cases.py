@@ -492,6 +492,77 @@ def parse_result(result_str: str) -> Tuple[UnaryCheck, str]:
     return check_result, expr
 
 
+def parse_complex_result(result_str: str) -> Tuple[UnaryCheck, str]:
+    """
+    Parses a Sphinx-formatted result string to return:
+
+     1. A function which takes an input and returns True if it is the expected
+        result (or meets the condition of the expected result), otherwise False.
+     2. A string that expresses the result.
+
+    e.g.
+
+        >>> check_result, expr = parse_result('``42``')
+        >>> check_result(7)
+        False
+        >>> check_result(42)
+        True
+        >>> expr
+        '42'
+
+    """
+    r_complex_value_2 = re.compile('``(.+) [+-±] (.+) \(sign')
+    r_complex_value_1 = re.compile('``(.+) [+-±] (.+)')
+
+
+    if m := r_code.match(result_str):
+        value = parse_value(m.group(1))
+        check_result = make_strict_eq(value)  # type: ignore
+        expr = m.group(1)
+    else:
+        # parse real and imaginary parts
+        if m := r_complex_value_2.match(result_str):
+            print('<2> ', m.groups(), ' / ', result_str)
+        elif m := r_complex_value_1.match(result_str):
+            print('<1> ', m.groups(), ' / ', result_str)
+        else:
+            print('<nope>', result_str)
+            raise ParseError(result_str)
+
+    if 0:
+        pass
+    elif m := r_approx_value.match(result_str):
+        value = parse_value(m.group(1))
+        check_result = make_rough_eq(value)  # type: ignore
+        repr_ = m.group(1).replace("π", "pi")  # for pytest param names
+        expr = f"roughly {repr_}"
+    elif "positive" in result_str:
+
+        def check_result(result: float) -> bool:
+            if math.isnan(result):
+                # The sign of NaN is out-of-scope
+                return True
+            return math.copysign(1, result) == 1
+
+        expr = "positive sign"
+    elif "negative" in result_str:
+
+        def check_result(result: float) -> bool:
+            if math.isnan(result):
+                # The sign of NaN is out-of-scope
+                return True
+            return math.copysign(1, result) == -1
+
+        expr = "negative sign"
+    else:
+        raise ParseError(result_str)
+
+    return check_result, expr
+
+
+
+
+
 class Case(Protocol):
     cond_expr: str
     result_expr: str
@@ -550,7 +621,7 @@ r_nan_signbit = re.compile(
     "the result is ``(.+)``"
 )
 
-r_complex_case = re.compile("If ``a`` is (.+) and ``b`` is (.+), the result is (.+).")
+r_complex_case = re.compile("If ``a`` is (.+) and ``b`` is (.+), the result is (.+)")
 
 
 def integers_from_dtype(dtype: DataType, **kw) -> st.SearchStrategy[float]:
@@ -711,11 +782,13 @@ def parse_unary_case_block(case_block: str, func_name: str) -> List[UnaryCase]:
             cases.append(case)
         elif m:=r_complex_case.search(case_str):
             try:
-#                breakpoint()
-                _check_result, result_expr = parse_result(m.group(2))
-                print(f"!!!! {func_name} {_check_result}, {result_expr}")
+   ##             breakpoint()
+   #             print(f"??? {m.groups()}")
+
+                _check_result, result_expr = parse_complex_result(m.group(3))
+                print(f"\t!!!! {func_name} {m.groups()} -- {_check_result}, {result_expr}")
             except ParseError as e:
-                print(f">>>> {func_name}: {e.value}")
+                print(f"\t>>>> {func_name}: {e.value}")
 #            breakpoint()
         else:
             if not r_remaining_case.search(case_str):
