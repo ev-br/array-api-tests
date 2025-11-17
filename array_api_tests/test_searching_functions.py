@@ -286,7 +286,7 @@ def test_searchsorted(data):
             out_dtype=out.dtype,
             expected=xp.__array_namespace_info__().default_dtypes()["indexing"],
         )
-        # TODO: values testing
+        # TODO: x2.ndim > 1, values testing
         ph.assert_shape("searchsorted", out_shape=out.shape, expected=x2.shape)
     except Exception as exc:
         ph.add_note(exc, repro_snippet)
