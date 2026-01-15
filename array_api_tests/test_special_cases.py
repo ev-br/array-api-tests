@@ -507,7 +507,7 @@ def parse_complex_value(value_str: str) -> complex:
         >>> parse_complex_value('+infinity + 3πj/4')
         (inf+2.356194490192345j)
     
-    Handles formats: "A + Bj", "A + B j", "A + πj/N", "A + NπJ/M"
+    Handles formats: "A + Bj", "A + B j", "A + πj/N", "A + Nπj/M"
     """
     m = r_complex_value.match(value_str)
     if m is None:
@@ -528,7 +528,7 @@ def parse_complex_value(value_str: str) -> complex:
     else:  # plain form
         imag_val_str_raw = m.group(5)
         # Strip trailing 'j' if present: "0j" -> "0"
-        imag_val_str = imag_val_str_raw.rstrip('j') if imag_val_str_raw.endswith('j') else imag_val_str_raw
+        imag_val_str = imag_val_str_raw[:-1] if imag_val_str_raw.endswith('j') else imag_val_str_raw
     
     imag_val = parse_value(imag_sign + imag_val_str)
     
@@ -595,6 +595,19 @@ def parse_complex_cond(
     return complex_cond, expr, complex_from_dtype
 
 
+def _check_component_with_tolerance(actual: float, expected: float, allow_any_sign: bool) -> bool:
+    """
+    Helper to check if actual matches expected, with optional sign flexibility and tolerance.
+    """
+    if allow_any_sign and not math.isnan(expected):
+        return abs(actual) == abs(expected) or math.isclose(abs(actual), abs(expected), abs_tol=0.01)
+    elif not math.isnan(expected):
+        check_fn = make_strict_eq(expected) if expected == 0 or math.isinf(expected) else make_rough_eq(expected)
+        return check_fn(actual)
+    else:
+        return math.isnan(actual)
+
+
 def parse_complex_result(result_str: str) -> Tuple[Callable[[complex], bool], str]:
     """
     Parses a complex result string to return a checker and expression.
@@ -625,25 +638,8 @@ def parse_complex_result(result_str: str) -> Tuple[Callable[[complex], bool], st
         if has_pi:
             # Use approximate equality for both real and imaginary parts if they involve π
             def check_result(z: complex) -> bool:
-                real_match = True
-                imag_match = True
-                
-                if unspecified_real_sign and not math.isnan(expected.real):
-                    real_match = abs(z.real) == abs(expected.real) or math.isclose(abs(z.real), abs(expected.real), abs_tol=0.01)
-                elif not math.isnan(expected.real):
-                    real_check = make_strict_eq(expected.real) if expected.real == 0 or math.isinf(expected.real) else make_rough_eq(expected.real)
-                    real_match = real_check(z.real)
-                else:
-                    real_match = math.isnan(z.real)
-                
-                if unspecified_imag_sign and not math.isnan(expected.imag):
-                    imag_match = abs(z.imag) == abs(expected.imag) or math.isclose(abs(z.imag), abs(expected.imag), abs_tol=0.01)
-                elif not math.isnan(expected.imag):
-                    imag_check = make_strict_eq(expected.imag) if expected.imag == 0 or math.isinf(expected.imag) else make_rough_eq(expected.imag)
-                    imag_match = imag_check(z.imag)
-                else:
-                    imag_match = math.isnan(z.imag)
-                
+                real_match = _check_component_with_tolerance(z.real, expected.real, unspecified_real_sign)
+                imag_match = _check_component_with_tolerance(z.imag, expected.imag, unspecified_imag_sign)
                 return real_match and imag_match
         elif unspecified_real_sign and not math.isnan(expected.real):
             # Allow any sign for real part
@@ -734,7 +730,7 @@ r_complex_case = re.compile(r"If ``a`` is (.+) and ``b`` is (.+), the result is 
 # Matches complex values like "+0 + 0j", "NaN + NaN j", "infinity + NaN j", "πj/2", "3πj/4"
 # Two formats: 1) πj/N expressions where j is part of the coefficient, 2) plain values followed by j
 r_complex_value = re.compile(
-    r"([+-]?)([^\s]+)\s*([+-])\s*(?:(\d*πj(?:/\d)?)|([^\s]+))\s*j?"
+    r"([+-]?)([^\s]+)\s*([+-])\s*(?:(\d*πj(?:/\d+)?)|([^\s]+))\s*j?"
 )
 
 
