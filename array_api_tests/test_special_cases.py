@@ -128,6 +128,9 @@ repr_to_value = {
 }
 r_value = re.compile(r"([+-]?)(.+)")
 r_pi = re.compile(r"(\d?)π(?:/(\d))?")
+r_complex_value = re.compile(
+    r"([+-]?)([^\s]+)\s*([+-])\s*([^\s]+)\s*j\s*(?:/(\d+))?"
+)
 
 
 @dataclass
@@ -165,6 +168,38 @@ def parse_value(value_str: str) -> float:
         if sign == "-":
             value *= -1
     return value
+
+
+def parse_complex_value(value_str: str) -> complex:
+    """
+    Parses a complex value string to return a complex number, e.g.
+
+        >>> parse_complex_value('+0 + 0j')
+        0j
+        >>> parse_complex_value('+0 + πj/2')
+        1.5707963267948966j
+        >>> parse_complex_value('NaN + NaN j')
+        (nan+nanj)
+
+    """
+    m = r_complex_value.match(value_str)
+    if m is None:
+        raise ParseError(value_str)
+    
+    # Parse real part
+    real_sign = m.group(1) or '+'
+    real_value_str = real_sign + m.group(2)
+    real_part = parse_value(real_value_str)
+    
+    # Parse imaginary part
+    imag_sign = m.group(3)
+    imag_value_str = imag_sign + m.group(4)
+    # Check if there's a denominator (group 5)
+    if m.group(5):
+        imag_value_str += '/' + m.group(5)
+    imag_part = parse_value(imag_value_str)
+    
+    return complex(real_part, imag_part)
 
 
 r_code = re.compile(r"``([^\s]+)``")
