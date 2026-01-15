@@ -99,7 +99,7 @@ def make_or(cond1: UnaryCheck, cond2: UnaryCheck) -> UnaryCheck:
 
 def make_and(cond1: UnaryCheck, cond2: UnaryCheck) -> UnaryCheck:
     def and_(i: float) -> bool:
-        return cond1(i) or cond2(i)
+        return cond1(i) and cond2(i)
 
     return and_
 
@@ -1337,7 +1337,7 @@ def test_iop(iop_name, iop, case, data):
     res_value = float(res)
 
     assert case.check_result(x1_value, x2_value, res_value), (
-        f"x1={res}, but should be {case.result_expr} [{func_name}()]\n"
+        f"x1={res}, but should be {case.result_expr} [{iop_name}()]\n"
         f"condition: {case}\n"
         f"x1={x1_value}, x2={x2_value}"
     )
