@@ -492,6 +492,143 @@ def parse_result(result_str: str) -> Tuple[UnaryCheck, str]:
     return check_result, expr
 
 
+def parse_complex_value(value_str: str) -> complex:
+    """
+    Parses a complex value string to return a complex number, e.g.
+    
+        >>> parse_complex_value('+0 + 0j')
+        0j
+        >>> parse_complex_value('NaN + NaN j')
+        (nan+nanj)
+        >>> parse_complex_value('0 + NaN j')
+        nanj
+    
+    Handles both "0j" and "0 j" formats with optional spaces.
+    """
+    # Handle the format like "+0 + 0j" or "NaN + NaN j"
+    m = r_complex_value.match(value_str)
+    if m is None:
+        raise ParseError(value_str)
+    
+    # Parse real part with its sign
+    real_sign = m.group(1) if m.group(1) else "+"
+    real_val_str = m.group(2)
+    real_val = parse_value(real_sign + real_val_str)
+    
+    # Parse imaginary part with its sign
+    imag_sign = m.group(3)
+    imag_val_str = m.group(4)
+    imag_val = parse_value(imag_sign + imag_val_str)
+    
+    return complex(real_val, imag_val)
+
+
+def make_strict_eq_complex(v: complex) -> Callable[[complex], bool]:
+    """
+    Creates a checker for complex values that respects sign of zero and NaN.
+    """
+    real_check = make_strict_eq(v.real)
+    imag_check = make_strict_eq(v.imag)
+    
+    def strict_eq_complex(z: complex) -> bool:
+        return real_check(z.real) and imag_check(z.imag)
+    
+    return strict_eq_complex
+
+
+def parse_complex_cond(
+    a_cond_str: str, b_cond_str: str
+) -> Tuple[Callable[[complex], bool], str, FromDtypeFunc]:
+    """
+    Parses complex condition strings for real (a) and imaginary (b) parts.
+    
+    Returns:
+        - cond: Function that checks if a complex number meets the condition
+        - expr: String expression for the condition
+        - from_dtype: Strategy generator for complex numbers meeting the condition
+    """
+    # Parse conditions for real and imaginary parts separately
+    a_cond, a_expr_template, a_from_dtype = parse_cond(a_cond_str)
+    b_cond, b_expr_template, b_from_dtype = parse_cond(b_cond_str)
+    
+    # Create compound condition
+    def complex_cond(z: complex) -> bool:
+        return a_cond(z.real) and b_cond(z.imag)
+    
+    # Create expression
+    a_expr = a_expr_template.replace("{}", "real(x_i)")
+    b_expr = b_expr_template.replace("{}", "imag(x_i)")
+    expr = f"{a_expr} and {b_expr}"
+    
+    # Create strategy that generates complex numbers
+    def complex_from_dtype(dtype: DataType, **kw) -> st.SearchStrategy[complex]:
+        assert len(kw) == 0  # sanity check
+        # For complex dtype, we need to get the corresponding float dtype
+        # complex64 -> float32, complex128 -> float64
+        if hasattr(dtype, 'name'):
+            if 'complex64' in str(dtype):
+                float_dtype = xp.float32
+            elif 'complex128' in str(dtype):
+                float_dtype = xp.float64
+            else:
+                # Fallback to float64
+                float_dtype = xp.float64
+        else:
+            float_dtype = xp.float64
+        
+        real_strat = a_from_dtype(float_dtype)
+        imag_strat = b_from_dtype(float_dtype)
+        return st.builds(complex, real_strat, imag_strat)
+    
+    return complex_cond, expr, complex_from_dtype
+
+
+def parse_complex_result(result_str: str) -> Tuple[Callable[[complex], bool], str]:
+    """
+    Parses a complex result string to return a checker and expression.
+    
+    Handles cases like:
+        - "``+0 + 0j``" - exact complex value
+        - "``0 + NaN j`` (sign of the real component is unspecified)" - allow any sign for real
+        - "``NaN + NaN j``" - both parts NaN
+    """
+    # Check for unspecified sign note
+    unspecified_real_sign = "sign of the real component is unspecified" in result_str
+    unspecified_imag_sign = "sign of the imaginary component is unspecified" in result_str
+    
+    # Extract the complex value from backticks
+    if m := r_code.match(result_str):
+        value_str = m.group(1)
+        try:
+            expected = parse_complex_value(value_str)
+        except ParseError:
+            raise ParseError(result_str)
+        
+        # Create checker based on whether signs are unspecified
+        if unspecified_real_sign and not math.isnan(expected.real):
+            # Allow any sign for real part
+            def check_result(z: complex) -> bool:
+                imag_check = make_strict_eq(expected.imag)
+                return abs(z.real) == abs(expected.real) and imag_check(z.imag)
+        elif unspecified_imag_sign and not math.isnan(expected.imag):
+            # Allow any sign for imaginary part
+            def check_result(z: complex) -> bool:
+                real_check = make_strict_eq(expected.real)
+                return real_check(z.real) and abs(z.imag) == abs(expected.imag)
+        elif unspecified_real_sign and unspecified_imag_sign:
+            # Allow any sign for both parts
+            def check_result(z: complex) -> bool:
+                return abs(z.real) == abs(expected.real) and abs(z.imag) == abs(expected.imag)
+        else:
+            # Exact match including signs
+            check_result = make_strict_eq_complex(expected)
+        
+        expr = value_str
+        return check_result, expr
+    else:
+        raise ParseError(result_str)
+
+
 class Case(Protocol):
     cond_expr: str
     result_expr: str
@@ -548,6 +685,15 @@ r_even_round_halves_case = re.compile(
 r_nan_signbit = re.compile(
     "If ``x_i`` is ``NaN`` and the sign bit of ``x_i`` is ``(.+)``, "
     "the result is ``(.+)``"
+)
+# Regex patterns for complex special cases
+r_complex_marker = re.compile(
+    r"For complex floating-point operands, let ``a = real\(x_i\)``, ``b = imag\(x_i\)``"
+)
+r_complex_case = re.compile(r"If ``a`` is (.+) and ``b`` is (.+), the result is (.+)")
+# Matches complex values like "+0 + 0j", "NaN + NaN j", "infinity + NaN j"
+r_complex_value = re.compile(
+    r"([+-]?)([^\s]+)\s*([+-])\s*([^\s]+)\s*j"
 )
 
 
@@ -677,8 +823,53 @@ def parse_unary_case_block(case_block: str, func_name: str) -> List[UnaryCase]:
 
     """
     cases = []
+    # Check if the case block contains complex cases by looking for the marker
+    in_complex_section = r_complex_marker.search(case_block) is not None
+    
     for case_m in r_case.finditer(case_block):
         case_str = case_m.group(1)
+        
+        # Try to parse complex cases if we're in the complex section
+        if in_complex_section and (m := r_complex_case.search(case_str)):
+            try:
+                a_cond_str = m.group(1)
+                b_cond_str = m.group(2)
+                result_str = m.group(3)
+                
+                # Skip cases with complex expressions like "cis(b)"
+                if "cis" in result_str or "*" in result_str:
+                    warn(f"case for {func_name} not machine-readable: '{case_str}'")
+                    continue
+                
+                # Parse the complex condition and result
+                complex_cond, cond_expr, complex_from_dtype = parse_complex_cond(
+                    a_cond_str, b_cond_str
+                )
+                _check_result, result_expr = parse_complex_result(result_str)
+                
+                # Create a wrapper that works with complex inputs
+                def make_complex_check_result(check_fn):
+                    def check_result(in_value, out_value):
+                        # in_value is complex, out_value is complex
+                        return check_fn(out_value)
+                    return check_result
+                
+                check_result = make_complex_check_result(_check_result)
+                
+                case = UnaryCase(
+                    cond_expr=cond_expr,
+                    cond=complex_cond,
+                    cond_from_dtype=complex_from_dtype,
+                    result_expr=result_expr,
+                    check_result=check_result,
+                    raw_case=case_str,
+                )
+                cases.append(case)
+            except ParseError as e:
+                warn(f"case for {func_name} not machine-readable: '{e.value}'")
+            continue
+        
+        # Parse regular (real-valued) cases
         if r_already_int_case.search(case_str):
             cases.append(already_int_case)
         elif r_even_round_halves_case.search(case_str):
@@ -1257,10 +1448,31 @@ def test_unary(func_name, func, case):
         # drawing multiple examples like a normal test, or just hard-coding a
         # single example test case without using hypothesis.
         filterwarnings('ignore', category=NonInteractiveExampleWarning)
-        in_value = case.cond_from_dtype(xp.float64).example()
-    x = xp.asarray(in_value, dtype=xp.float64)
-    out = func(x)
-    out_value = float(out)
+        
+        # Determine if this is a complex case by checking the strategy
+        # Try to generate an example to see if it's complex
+        try:
+            in_value = case.cond_from_dtype(xp.float64).example()
+        except Exception:
+            # If float64 fails, try complex128
+            try:
+                in_value = case.cond_from_dtype(xp.complex128).example()
+            except Exception:
+                # Fallback to float64
+                in_value = case.cond_from_dtype(xp.float64).example()
+    
+    # Determine appropriate dtype based on input value type
+    if isinstance(in_value, complex):
+        dtype = xp.complex128
+        x = xp.asarray(in_value, dtype=dtype)
+        out = func(x)
+        out_value = complex(out)
+    else:
+        dtype = xp.float64
+        x = xp.asarray(in_value, dtype=dtype)
+        out = func(x)
+        out_value = float(out)
+    
     assert case.check_result(in_value, out_value), (
         f"out={out_value}, but should be {case.result_expr} [{func_name}()]\n"
     )
