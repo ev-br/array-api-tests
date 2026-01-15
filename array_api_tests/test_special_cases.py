@@ -502,10 +502,13 @@ def parse_complex_value(value_str: str) -> complex:
         (nan+nanj)
         >>> parse_complex_value('0 + NaN j')
         nanj
+        >>> parse_complex_value('+0 + πj/2')
+        1.5707963267948966j
+        >>> parse_complex_value('+infinity + 3πj/4')
+        (inf+2.356194490192345j)
     
-    Handles both "0j" and "0 j" formats with optional spaces.
+    Handles formats: "A + Bj", "A + B j", "A + πj/N", "A + NπJ/M"
     """
-    # Handle the format like "+0 + 0j" or "NaN + NaN j"
     m = r_complex_value.match(value_str)
     if m is None:
         raise ParseError(value_str)
@@ -517,7 +520,16 @@ def parse_complex_value(value_str: str) -> complex:
     
     # Parse imaginary part with its sign
     imag_sign = m.group(3)
-    imag_val_str = m.group(4)
+    # Group 4 is πj form (e.g., "πj/2"), group 5 is plain form (e.g., "NaN")
+    if m.group(4):  # πj form
+        imag_val_str_raw = m.group(4)
+        # Remove 'j' to get coefficient: "πj/2" -> "π/2"
+        imag_val_str = imag_val_str_raw.replace('j', '')
+    else:  # plain form
+        imag_val_str_raw = m.group(5)
+        # Strip trailing 'j' if present: "0j" -> "0"
+        imag_val_str = imag_val_str_raw.rstrip('j') if imag_val_str_raw.endswith('j') else imag_val_str_raw
+    
     imag_val = parse_value(imag_sign + imag_val_str)
     
     return complex(real_val, imag_val)
@@ -589,10 +601,10 @@ def parse_complex_result(result_str: str) -> Tuple[Callable[[complex], bool], st
     
     Handles cases like:
         - "``+0 + 0j``" - exact complex value
-        - "``0 + NaN j`` (sign of the real component is unspecified)" - allow any sign for real
-        - "``NaN + NaN j``" - both parts NaN
+        - "``0 + NaN j`` (sign of the real component is unspecified)" 
+        - "``+0 + πj/2``" - with π expressions (uses approximate equality)
     """
-    # Check for unspecified sign note
+    # Check for unspecified sign notes
     unspecified_real_sign = "sign of the real component is unspecified" in result_str
     unspecified_imag_sign = "sign of the imaginary component is unspecified" in result_str
     
@@ -601,13 +613,39 @@ def parse_complex_result(result_str: str) -> Tuple[Callable[[complex], bool], st
     m = re.search(r"``([^`]+)``", result_str)
     if m:
         value_str = m.group(1)
+        # Check if the value contains π expressions (for approximate comparison)
+        has_pi = 'π' in value_str
+        
         try:
             expected = parse_complex_value(value_str)
         except ParseError:
             raise ParseError(result_str)
         
-        # Create checker based on whether signs are unspecified
-        if unspecified_real_sign and not math.isnan(expected.real):
+        # Create checker based on whether signs are unspecified and whether π is involved
+        if has_pi:
+            # Use approximate equality for both real and imaginary parts if they involve π
+            def check_result(z: complex) -> bool:
+                real_match = True
+                imag_match = True
+                
+                if unspecified_real_sign and not math.isnan(expected.real):
+                    real_match = abs(z.real) == abs(expected.real) or math.isclose(abs(z.real), abs(expected.real), abs_tol=0.01)
+                elif not math.isnan(expected.real):
+                    real_check = make_strict_eq(expected.real) if expected.real == 0 or math.isinf(expected.real) else make_rough_eq(expected.real)
+                    real_match = real_check(z.real)
+                else:
+                    real_match = math.isnan(z.real)
+                
+                if unspecified_imag_sign and not math.isnan(expected.imag):
+                    imag_match = abs(z.imag) == abs(expected.imag) or math.isclose(abs(z.imag), abs(expected.imag), abs_tol=0.01)
+                elif not math.isnan(expected.imag):
+                    imag_check = make_strict_eq(expected.imag) if expected.imag == 0 or math.isinf(expected.imag) else make_rough_eq(expected.imag)
+                    imag_match = imag_check(z.imag)
+                else:
+                    imag_match = math.isnan(z.imag)
+                
+                return real_match and imag_match
+        elif unspecified_real_sign and not math.isnan(expected.real):
             # Allow any sign for real part
             def check_result(z: complex) -> bool:
                 imag_check = make_strict_eq(expected.imag)
@@ -693,9 +731,10 @@ r_complex_marker = re.compile(
     r"For complex floating-point operands, let ``a = real\(x_i\)``, ``b = imag\(x_i\)``"
 )
 r_complex_case = re.compile(r"If ``a`` is (.+) and ``b`` is (.+), the result is (.+)")
-# Matches complex values like "+0 + 0j", "NaN + NaN j", "infinity + NaN j"
+# Matches complex values like "+0 + 0j", "NaN + NaN j", "infinity + NaN j", "πj/2", "3πj/4"
+# Two formats: 1) πj/N expressions where j is part of the coefficient, 2) plain values followed by j
 r_complex_value = re.compile(
-    r"([+-]?)([^\s]+)\s*([+-])\s*([^\s]+)\s*j"
+    r"([+-]?)([^\s]+)\s*([+-])\s*(?:(\d*πj(?:/\d)?)|([^\s]+))\s*j?"
 )
 
 
