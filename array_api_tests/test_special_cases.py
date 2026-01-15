@@ -596,8 +596,10 @@ def parse_complex_result(result_str: str) -> Tuple[Callable[[complex], bool], st
     unspecified_real_sign = "sign of the real component is unspecified" in result_str
     unspecified_imag_sign = "sign of the imaginary component is unspecified" in result_str
     
-    # Extract the complex value from backticks
-    if m := r_code.match(result_str):
+    # Extract the complex value from backticks - need to handle spaces in complex values
+    # Pattern: ``...`` where ... can contain spaces (for complex values like "0 + NaN j")
+    m = re.search(r"``([^`]+)``", result_str)
+    if m:
         value_str = m.group(1)
         try:
             expected = parse_complex_value(value_str)
