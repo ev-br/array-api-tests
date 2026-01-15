@@ -99,7 +99,7 @@ def make_or(cond1: UnaryCheck, cond2: UnaryCheck) -> UnaryCheck:
 
 def make_and(cond1: UnaryCheck, cond2: UnaryCheck) -> UnaryCheck:
     def and_(i: float) -> bool:
-        return cond1(i) or cond2(i)
+        return cond1(i) and cond2(i)
 
     return and_
 
@@ -778,6 +778,14 @@ def make_unary_check_result(check_just_result: UnaryCheck) -> UnaryResultCheck:
     return check_result
 
 
+def make_complex_unary_check_result(check_fn: Callable[[complex], bool]) -> UnaryResultCheck:
+    """Wraps a complex check function for use in UnaryCase."""
+    def check_result(in_value, out_value):
+        # in_value is complex, out_value is complex
+        return check_fn(out_value)
+    return check_result
+
+
 def parse_unary_case_block(case_block: str, func_name: str) -> List[UnaryCase]:
     """
     Parses a Sphinx-formatted docstring of a unary function to return a list of
@@ -849,14 +857,7 @@ def parse_unary_case_block(case_block: str, func_name: str) -> List[UnaryCase]:
                 )
                 _check_result, result_expr = parse_complex_result(result_str)
                 
-                # Create a wrapper that works with complex inputs
-                def make_complex_check_result(check_fn):
-                    def check_result(in_value, out_value):
-                        # in_value is complex, out_value is complex
-                        return check_fn(out_value)
-                    return check_result
-                
-                check_result = make_complex_check_result(_check_result)
+                check_result = make_complex_unary_check_result(_check_result)
                 
                 case = UnaryCase(
                     cond_expr=cond_expr,
