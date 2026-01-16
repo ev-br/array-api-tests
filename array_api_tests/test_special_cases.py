@@ -822,7 +822,7 @@ def make_complex_unary_check_result(check_fn: Callable[[complex], bool]) -> Unar
     return check_result
 
 
-def parse_unary_case_block(case_block: str, func_name: str) -> List[UnaryCase]:
+def parse_unary_case_block(case_block: str, func_name: str, record_list: Optional[List[str]] = None) -> List[UnaryCase]:
     """
     Parses a Sphinx-formatted docstring of a unary function to return a list of
     codified unary cases, e.g.
@@ -874,6 +874,11 @@ def parse_unary_case_block(case_block: str, func_name: str) -> List[UnaryCase]:
     
     for case_m in r_case.finditer(case_block):
         case_str = case_m.group(1)
+        
+        # Record this special case if a record list is provided
+        if record_list is not None:
+            record_list.append(f"{func_name}: {case_str}.")
+        
         
         # Try to parse complex cases if we're in the complex section
         if in_complex_section and (m := r_complex_case.search(case_str)):
@@ -1334,7 +1339,7 @@ def parse_binary_case(case_str: str) -> BinaryCase:
 r_redundant_case = re.compile("result.+determined by the rule already stated above")
 
 
-def parse_binary_case_block(case_block: str, func_name: str) -> List[BinaryCase]:
+def parse_binary_case_block(case_block: str, func_name: str, record_list: Optional[List[str]] = None) -> List[BinaryCase]:
     """
     Parses a Sphinx-formatted docstring of a binary function to return a list of
     codified binary cases, e.g.
@@ -1376,6 +1381,11 @@ def parse_binary_case_block(case_block: str, func_name: str) -> List[BinaryCase]
     cases = []
     for case_m in r_case.finditer(case_block):
         case_str = case_m.group(1)
+        
+        # Record this special case if a record list is provided
+        if record_list is not None:
+            record_list.append(f"{func_name}: {case_str}.")
+        
         if r_redundant_case.search(case_str):
             continue
         if r_binary_case.match(case_str):
@@ -1393,6 +1403,7 @@ def parse_binary_case_block(case_block: str, func_name: str) -> List[BinaryCase]
 unary_params = []
 binary_params = []
 iop_params = []
+special_case_records = []  # List of "func_name: case_str" for all special cases
 func_to_op: Dict[str, str] = {v: k for k, v in dh.op_to_func.items()}
 for stub in category_to_funcs["elementwise"]:
     func_name = stub.__name__
@@ -1417,7 +1428,7 @@ for stub in category_to_funcs["elementwise"]:
         warn(f"{func=} has no parameters")
         continue
     if param_names[0] == "x":
-        if cases := parse_unary_case_block(case_block, func_name):
+        if cases := parse_unary_case_block(case_block, func_name, special_case_records):
             name_to_func = {func_name: func}
             if func_name in func_to_op.keys():
                 op_name = func_to_op[func_name]
@@ -1435,7 +1446,7 @@ for stub in category_to_funcs["elementwise"]:
         warn(f"{func=} has one parameter '{param_names[0]}' which is not named 'x'")
         continue
     if param_names[0] == "x1" and param_names[1] == "x2":
-        if cases := parse_binary_case_block(case_block, func_name):
+        if cases := parse_binary_case_block(case_block, func_name, special_case_records):
             name_to_func = {func_name: func}
             if func_name in func_to_op.keys():
                 op_name = func_to_op[func_name]
@@ -1478,6 +1489,22 @@ for stub in category_to_funcs["elementwise"]:
 assert len(unary_params) != 0
 assert len(binary_params) != 0
 assert len(iop_params) != 0
+
+
+def emit_special_case_records():
+    """Emit all special case records for debugging/tracking purposes."""
+    print("\n" + "="*80)
+    print("SPECIAL CASE RECORDS")
+    print("="*80)
+    for record in special_case_records:
+        print(record)
+    print("="*80)
+    print(f"Total special cases: {len(special_case_records)}")
+    print("="*80 + "\n")
+
+
+# Emit special case records at module load time
+emit_special_case_records()
 
 
 @pytest.mark.parametrize("func_name, func, case", unary_params)
