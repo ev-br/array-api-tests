@@ -15,6 +15,7 @@ from __future__ import annotations
 import inspect
 import math
 import operator
+import os
 import re
 from dataclasses import dataclass, field
 from decimal import ROUND_HALF_EVEN, Decimal
@@ -1495,14 +1496,15 @@ assert len(iop_params) != 0
 def emit_special_case_records():
     """Emit all special case records at the start of test session."""
     # This runs once at the beginning of the test session
-    print("\n" + "="*80)
-    print("SPECIAL CASE RECORDS")
-    print("="*80)
-    for record in special_case_records:
-        print(record)
-    print("="*80)
-    print(f"Total special cases: {len(special_case_records)}")
-    print("="*80 + "\n")
+    if os.environ.get('ARRAY_API_TESTS_SPECIAL_CASES_VERBOSE') == '1':
+        print("\n" + "="*80)
+        print("SPECIAL CASE RECORDS")
+        print("="*80)
+        for record in special_case_records:
+            print(record)
+        print("="*80)
+        print(f"Total special cases: {len(special_case_records)}")
+        print("="*80 + "\n")
     yield  # Tests run after this point
 
 
