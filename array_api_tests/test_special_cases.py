@@ -708,6 +708,7 @@ class UnaryCase(Case):
     cond: UnaryCheck
     check_result: UnaryResultCheck
     raw_case: Optional[str] = field(default=None)
+    is_complex: bool = field(default=False)
 
 
 r_unary_case = re.compile("If ``x_i`` is (.+), the result is (.+)")
@@ -901,6 +902,7 @@ def parse_unary_case_block(case_block: str, func_name: str) -> List[UnaryCase]:
                     result_expr=result_expr,
                     check_result=check_result,
                     raw_case=case_str,
+                    is_complex=True,
                 )
                 cases.append(case)
             except ParseError as e:
@@ -1487,28 +1489,21 @@ def test_unary(func_name, func, case):
         # single example test case without using hypothesis.
         filterwarnings('ignore', category=NonInteractiveExampleWarning)
         
-        # Determine if this is a complex case by checking the strategy
-        # Try to generate an example to see if it's complex
-        try:
-            in_value = case.cond_from_dtype(xp.float64).example()
-        except Exception:
-            # If float64 fails, try complex128
-            try:
-                in_value = case.cond_from_dtype(xp.complex128).example()
-            except Exception:
-                # Fallback to float64
-                in_value = case.cond_from_dtype(xp.float64).example()
+        # Use the is_complex flag to determine the appropriate dtype
+        if case.is_complex:
+            dtype = xp.complex128
+            in_value = case.cond_from_dtype(dtype).example()
+        else:
+            dtype = xp.float64
+            in_value = case.cond_from_dtype(dtype).example()
     
-    # Determine appropriate dtype based on input value type
-    if isinstance(in_value, complex):
-        dtype = xp.complex128
-        x = xp.asarray(in_value, dtype=dtype)
-        out = func(x)
+    # Create array and compute result based on dtype
+    x = xp.asarray(in_value, dtype=dtype)
+    out = func(x)
+    
+    if case.is_complex:
         out_value = complex(out)
     else:
-        dtype = xp.float64
-        x = xp.asarray(in_value, dtype=dtype)
-        out = func(x)
         out_value = float(out)
     
     assert case.check_result(in_value, out_value), (
