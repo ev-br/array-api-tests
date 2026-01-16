@@ -1389,6 +1389,6 @@ def test_print_special_cases_registry():
     else:
         print("No special cases recorded")
     print("=" * 80)
-    # This test always passes - it's just for printing
-    assert True
+    # Verify the registry is accessible
+    assert isinstance(special_cases_registry, list)
 
