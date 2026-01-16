@@ -1491,8 +1491,10 @@ assert len(binary_params) != 0
 assert len(iop_params) != 0
 
 
+@pytest.fixture(scope="session", autouse=True)
 def emit_special_case_records():
-    """Emit all special case records for debugging/tracking purposes."""
+    """Emit all special case records at the start of test session."""
+    # This runs once at the beginning of the test session
     print("\n" + "="*80)
     print("SPECIAL CASE RECORDS")
     print("="*80)
@@ -1501,10 +1503,7 @@ def emit_special_case_records():
     print("="*80)
     print(f"Total special cases: {len(special_case_records)}")
     print("="*80 + "\n")
-
-
-# Emit special case records at module load time
-emit_special_case_records()
+    yield  # Tests run after this point
 
 
 @pytest.mark.parametrize("func_name, func, case", unary_params)
