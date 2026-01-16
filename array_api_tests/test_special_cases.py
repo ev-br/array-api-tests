@@ -38,6 +38,9 @@ from .stubs import category_to_funcs
 UnaryCheck = Callable[[float], bool]
 BinaryCheck = Callable[[float, float], bool]
 
+# Global registry for recording special cases
+special_cases_registry: List[str] = []
+
 
 def make_strict_eq(v: float) -> UnaryCheck:
     if math.isnan(v):
@@ -679,6 +682,9 @@ def parse_unary_case_block(case_block: str, func_name: str) -> List[UnaryCase]:
     cases = []
     for case_m in r_case.finditer(case_block):
         case_str = case_m.group(1)
+        # Record the special case line in the global registry
+        special_cases_registry.append(f"{func_name}: {case_str}")
+        
         if r_already_int_case.search(case_str):
             cases.append(already_int_case)
         elif r_even_round_halves_case.search(case_str):
@@ -1145,6 +1151,9 @@ def parse_binary_case_block(case_block: str, func_name: str) -> List[BinaryCase]
     cases = []
     for case_m in r_case.finditer(case_block):
         case_str = case_m.group(1)
+        # Record the special case line in the global registry
+        special_cases_registry.append(f"{func_name}: {case_str}")
+        
         if r_redundant_case.search(case_str):
             continue
         if r_binary_case.match(case_str):
@@ -1351,3 +1360,26 @@ def test_nan_propagation(func_name, x, data):
 
     ph.assert_shape(func_name, out_shape=out.shape, expected=())  # sanity check
     assert xp.isnan(out), f"{out=!r}, but should be NaN"
+
+
+def test_print_special_cases_registry():
+    """
+    Test function to emit all recorded special cases.
+    
+    This test prints the complete registry of special cases that were parsed
+    from docstrings during module load time.
+    """
+    print("\n" + "=" * 80)
+    print("SPECIAL CASES REGISTRY")
+    print("=" * 80)
+    if special_cases_registry:
+        for case_record in special_cases_registry:
+            print(case_record)
+        print("=" * 80)
+        print(f"Total special cases recorded: {len(special_cases_registry)}")
+    else:
+        print("No special cases recorded")
+    print("=" * 80)
+    # This test always passes - it's just for printing
+    assert True
+
