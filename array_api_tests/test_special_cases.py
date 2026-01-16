@@ -682,7 +682,9 @@ def parse_unary_case_block(case_block: str, func_name: str) -> List[UnaryCase]:
     cases = []
     for case_m in r_case.finditer(case_block):
         case_str = case_m.group(1)
-        # Record the special case line in the global registry
+        # Record the special case line in the global registry.
+        # Per requirements, we record ALL case lines that match r_case pattern,
+        # including those that fail to parse or trigger warnings.
         special_cases_registry.append(f"{func_name}: {case_str}")
         
         if r_already_int_case.search(case_str):
@@ -1151,7 +1153,9 @@ def parse_binary_case_block(case_block: str, func_name: str) -> List[BinaryCase]
     cases = []
     for case_m in r_case.finditer(case_block):
         case_str = case_m.group(1)
-        # Record the special case line in the global registry
+        # Record the special case line in the global registry.
+        # Per requirements, we record ALL case lines that match r_case pattern,
+        # including those that fail to parse or trigger warnings.
         special_cases_registry.append(f"{func_name}: {case_str}")
         
         if r_redundant_case.search(case_str):
@@ -1367,7 +1371,12 @@ def test_print_special_cases_registry():
     Test function to emit all recorded special cases.
     
     This test prints the complete registry of special cases that were parsed
-    from docstrings during module load time.
+    from docstrings during module load time. The registry is populated when
+    the module is imported, as parse_unary_case_block and parse_binary_case_block
+    are called to set up test parameters.
+    
+    This test always passes - it's purely for informational/debugging purposes
+    to view all special cases that were extracted from the Array API specification.
     """
     print("\n" + "=" * 80)
     print("SPECIAL CASES REGISTRY")
