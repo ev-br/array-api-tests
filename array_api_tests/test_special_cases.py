@@ -35,6 +35,9 @@ from . import pytest_helpers as ph
 from . import xp, xps
 from .stubs import category_to_funcs
 
+# Global registry to store all special case lines
+special_cases_registry = []
+
 UnaryCheck = Callable[[float], bool]
 BinaryCheck = Callable[[float, float], bool]
 
@@ -679,6 +682,7 @@ def parse_unary_case_block(case_block: str, func_name: str) -> List[UnaryCase]:
     cases = []
     for case_m in r_case.finditer(case_block):
         case_str = case_m.group(1)
+        special_cases_registry.append(f"{func_name}: {case_str}")
         if r_already_int_case.search(case_str):
             cases.append(already_int_case)
         elif r_even_round_halves_case.search(case_str):
@@ -1145,6 +1149,7 @@ def parse_binary_case_block(case_block: str, func_name: str) -> List[BinaryCase]
     cases = []
     for case_m in r_case.finditer(case_block):
         case_str = case_m.group(1)
+        special_cases_registry.append(f"{func_name}: {case_str}")
         if r_redundant_case.search(case_str):
             continue
         if r_binary_case.match(case_str):
@@ -1251,6 +1256,14 @@ assert len(iop_params) != 0
 
 @pytest.mark.parametrize("func_name, func, case", unary_params)
 def test_unary(func_name, func, case):
+    # Print registry once at the start
+    if not hasattr(test_unary, '_registry_printed'):
+        print("\n=== Special Cases Registry ===")
+        for entry in special_cases_registry:
+            print(entry)
+        print("=" * 30)
+        test_unary._registry_printed = True
+    
     with catch_warnings():
         # XXX: We are using example here to generate one example draw, but
         # hypothesis issues a warning from this. We should consider either
