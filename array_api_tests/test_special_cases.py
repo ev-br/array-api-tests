@@ -751,9 +751,9 @@ r_complex_marker = re.compile(
 r_complex_case = re.compile(r"If ``a`` is (.+) and ``b`` is (.+), the result is (.+)")
 # Matches complex values like "+0 + 0j", "NaN + NaN j", "infinity + NaN j", "πj/2", "3πj/4"
 # Two formats: 1) πj/N expressions where j is part of the coefficient, 2) plain values followed by j
-# Also handles ± symbol for unspecified signs
+# Also handles ± symbol for unspecified signs (with or without spaces after the sign)
 r_complex_value = re.compile(
-    r"([±+-]?)([^\s]+)\s*([±+-])\s*(?:(\d*πj(?:/\d+)?)|([^\s]+))\s*j?"
+    r"([±+-]?)\s*([^\s]+)\s*([±+-])\s*(?:(\d*πj(?:/\d+)?)|([^\s]+))\s*j?"
 )
 
 
