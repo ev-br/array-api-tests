@@ -1531,10 +1531,10 @@ def test_unary(func_name, func, case):
         
         # Use the is_complex flag to determine the appropriate dtype
         if case.is_complex:
-            dtype = xp.complex128
+            dtype = dh.complex_dtypes[-1]  # xp.complex128
             in_value = case.cond_from_dtype(dtype).example()
         else:
-            dtype = xp.float64
+            dtype = dh.real_float_dtypes[-1]  # xp.float64
             in_value = case.cond_from_dtype(dtype).example()
     
     # Create array and compute result based on dtype
@@ -1557,10 +1557,12 @@ def test_unary(func_name, func, case):
 def test_binary(func_name, func, case, data):
     # We don't use example() like in test_unary because the same internal shared
     # strategies used in both x1's and x2's don't "sync" with example() draws.
-    x1_value = data.draw(case.x1_cond_from_dtype(xp.float64), label="x1_value")
-    x2_value = data.draw(case.x2_cond_from_dtype(xp.float64), label="x2_value")
-    x1 = xp.asarray(x1_value, dtype=xp.float64)
-    x2 = xp.asarray(x2_value, dtype=xp.float64)
+    dtyp = dh.real_float_dtypes[-1]    # xp.float64
+
+    x1_value = data.draw(case.x1_cond_from_dtype(dtyp), label="x1_value")
+    x2_value = data.draw(case.x2_cond_from_dtype(dtyp), label="x2_value")
+    x1 = xp.asarray(x1_value, dtype=dtyp)
+    x2 = xp.asarray(x2_value, dtype=dtyp)
 
     out = func(x1, x2)
     out_value = float(out)
@@ -1578,10 +1580,11 @@ def test_binary(func_name, func, case, data):
 @given(data=st.data())
 def test_iop(iop_name, iop, case, data):
     # See test_binary comment
-    x1_value = data.draw(case.x1_cond_from_dtype(xp.float64), label="x1_value")
-    x2_value = data.draw(case.x2_cond_from_dtype(xp.float64), label="x2_value")
-    x1 = xp.asarray(x1_value, dtype=xp.float64)
-    x2 = xp.asarray(x2_value, dtype=xp.float64)
+    dtyp = dh.real_float_dtypes[-1]   # xp.float64
+    x1_value = data.draw(case.x1_cond_from_dtype(dtyp), label="x1_value")
+    x2_value = data.draw(case.x2_cond_from_dtype(dtyp), label="x2_value")
+    x1 = xp.asarray(x1_value, dtype=dtyp)
+    x2 = xp.asarray(x2_value, dtype=dtyp)
 
     res = iop(x1, x2)
     res_value = float(res)
