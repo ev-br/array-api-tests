@@ -1,6 +1,6 @@
 from enum import Enum
 
-from hypothesis import given, strategies as st
+from hypothesis import given, strategies as st, assume
 from . import _array_module as xp
 from . import pytest_helpers as ph
 from . import hypothesis_helpers as hh
@@ -29,8 +29,9 @@ def _compatible_devices(devices):
     # cf https://github.com/data-apis/array-api-compat/issues/337 and
     # https://github.com/cupy/cupy/issues/9848
     # Luckily, CuPy only supports CUDA devices, and they are all compatible.
-    compatible_ = []
+    dtype_compatible = []
     for device in devices:
+        compatible_ = []
         x = xp.empty(2, device=device)
         try:
             x.__dlpack_device__()
@@ -41,7 +42,14 @@ def _compatible_devices(devices):
         else:
             # no exception => device is compatible
             compatible_.append(device)
-    return compatible_
+
+
+    dtype_compatible_= [
+        device for device in compatible_
+        if x.dtype in xp.__array_namespace_info__().dtypes(device=device)
+    ]
+
+    return dtype_compatible
 
 
 @given(dtype=hh.all_dtypes, data=st.data())
@@ -109,6 +117,9 @@ def test_from_dlpack(x, copy_kw, data):
         hh.kwargs(device=st.sampled_from(devices) | st.none())
     )
     tgt_device = tgt_device_kw['device'] if tgt_device_kw else None
+
+    # the target device may or may not support x.dtype
+   ### assume(x.dtype in xp.__array_namespace_info__().dtypes(device=tgt_device))
 
     repro_snippet = ph.format_snippet(
         f"y = from_dlpack({x!r}, **tgt_device_kw, **copy_kw) with {tgt_device_kw=} and {copy_kw=}"
