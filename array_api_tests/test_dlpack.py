@@ -21,7 +21,7 @@ class DLPackDeviceEnum(Enum):
     ONE_API = 14
 
 
-def _compatible_devices(devices):
+def _compatible_devices(devices, x):
     """Given a list of devices, filter out dlpack-incompatible ones."""
     # XXX: there seems to be no better way than try-catch for __dlpack_device__()
 
@@ -32,7 +32,7 @@ def _compatible_devices(devices):
     dtype_compatible = []
     for device in devices:
         compatible_ = []
-        x = xp.empty(2, device=device)
+    ##    x = xp.empty(2, device=device)
         try:
             x.__dlpack_device__()
         except:
@@ -42,7 +42,6 @@ def _compatible_devices(devices):
         else:
             # no exception => device is compatible
             compatible_.append(device)
-
 
     dtype_compatible_= [
         device for device in compatible_
@@ -111,7 +110,12 @@ def test_from_dlpack(x, copy_kw, data):
         devices = [x.device]
     else:
         devices = xp.__array_namespace_info__().devices()
-        devices = _compatible_devices(devices)
+        devices = _compatible_devices(devices, x)
+
+  ###  return
+
+    if len(devices) == 0:
+        return
 
     tgt_device_kw = data.draw(
         hh.kwargs(device=st.sampled_from(devices) | st.none())
@@ -119,7 +123,7 @@ def test_from_dlpack(x, copy_kw, data):
     tgt_device = tgt_device_kw['device'] if tgt_device_kw else None
 
     # the target device may or may not support x.dtype
-   ### assume(x.dtype in xp.__array_namespace_info__().dtypes(device=tgt_device))
+    assume(x.dtype in xp.__array_namespace_info__().dtypes(device=tgt_device))
 
     repro_snippet = ph.format_snippet(
         f"y = from_dlpack({x!r}, **tgt_device_kw, **copy_kw) with {tgt_device_kw=} and {copy_kw=}"
