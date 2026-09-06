@@ -41,7 +41,6 @@ from . import shape_helpers as sh
 from . import api_version
 from .typing import Array
 
-from . import _array_module
 from . import _array_module as xp
 from ._array_module import linalg
 
@@ -142,9 +141,9 @@ def test_cholesky(x, kw):
 
     # Test that the result is upper or lower triangular
     if kw.get('upper', False):
-        assert_exactly_equal(res, _array_module.triu(res))
+        assert_exactly_equal(res, xp.triu(res))
     else:
-        assert_exactly_equal(res, _array_module.tril(res))
+        assert_exactly_equal(res, xp.tril(res))
 
 
 @composite
@@ -409,7 +408,7 @@ def _test_matmul(namespace, x1, x2):
         or len(x1.shape) >= 2 and len(x2.shape) >= 2 and x1.shape[-1] != x2.shape[-2]):
         # The spec doesn't specify what kind of exception is used here. Most
         # libraries will use a custom exception class.
-        ph.raises(Exception, lambda: _array_module.matmul(x1, x2),
+        ph.raises(Exception, lambda: xp.matmul(x1, x2),
                "matmul did not raise an exception for invalid shapes")
         return
     else:
@@ -451,7 +450,7 @@ def test_linalg_matmul(x1, x2):
     *two_mutual_arrays(dh.real_dtypes)
 )
 def test_matmul(x1, x2):
-    return _test_matmul(_array_module, x1, x2)
+    return _test_matmul(xp, x1, x2)
 
 @pytest.mark.unvectorized
 @pytest.mark.xp_extension('linalg')
@@ -497,7 +496,7 @@ def test_matrix_power(x, n):
                            out_shape=res.shape, expected=x.shape)
 
     if n == 0:
-        true_val = lambda x: _array_module.eye(x.shape[0], dtype=x.dtype)
+        true_val = lambda x: xp.eye(x.shape[0], dtype=x.dtype)
     else:
         true_val = None
     # _test_stacks only works with array arguments
@@ -516,7 +515,7 @@ def test_matrix_rank(x, kw):
 def _test_matrix_transpose(namespace, x):
     matrix_transpose = namespace.matrix_transpose
     res = matrix_transpose(x)
-    true_val = lambda a: _array_module.asarray(xp.stack([xp.stack([a[i, j] for i in
+    true_val = lambda a: xp.asarray(xp.stack([xp.stack([a[i, j] for i in
                                                range(a.shape[0])]) for j in
                                                range(a.shape[1])]),
                                                dtype=a.dtype)
@@ -542,7 +541,7 @@ def test_linalg_matrix_transpose(x):
     x=arrays(dtype=all_dtypes, shape=matrix_shapes()),
 )
 def test_matrix_transpose(x):
-    return _test_matrix_transpose(_array_module, x)
+    return _test_matrix_transpose(xp, x)
 
 @pytest.mark.xp_extension('linalg')
 @given(
@@ -560,9 +559,9 @@ def test_outer(x1, x2):
                            out_shape=res.shape, expected=shape)
 
     if 0 in shape:
-        true_res = _array_module.empty(shape, dtype=res.dtype)
+        true_res = xp.empty(shape, dtype=res.dtype)
     else:
-        true_res = _array_module.asarray([[x1[i]*x2[j]
+        true_res = xp.asarray([[x1[i]*x2[j]
                                            for j in range(x2.shape[0])]
                                           for i in range(x1.shape[0])],
                                          dtype=res.dtype)
@@ -618,7 +617,7 @@ def test_qr(x, kw):
     # TODO: Test that Q is orthonormal
 
     # Check that R is upper-triangular.
-    assert_exactly_equal(R, _array_module.triu(R))
+    assert_exactly_equal(R, xp.triu(R))
 
 @pytest.mark.unvectorized
 @pytest.mark.xp_extension('linalg')
@@ -757,7 +756,7 @@ def test_svd(x, kw):
 
     # The values of s must be sorted from largest to smallest
     if K >= 1:
-        assert _array_module.all(S[..., :-1] >= S[..., 1:]), "svd().S values are not sorted from largest to smallest"
+        assert xp.all(S[..., :-1] >= S[..., 1:]), "svd().S values are not sorted from largest to smallest"
 
     _test_stacks(lambda x: linalg.svd(x, **kw).U, x, res=U)
     _test_stacks(lambda x: linalg.svd(x, **kw).S, x, dims=1, res=S)
@@ -781,7 +780,7 @@ def test_svdvals(x):
                            expected=(*stack, K))
 
     # SVD values must be sorted from largest to smallest
-    assert _array_module.all(res[..., :-1] >= res[..., 1:]), "svdvals() values are not sorted from largest to smallest"
+    assert xp.all(res[..., :-1] >= res[..., 1:]), "svdvals() values are not sorted from largest to smallest"
 
     _test_stacks(linalg.svdvals, x, dims=1, res=res)
 
@@ -912,7 +911,7 @@ def test_linalg_tensordot(x1, x2, kw):
     tensordot_kw,
 )
 def test_tensordot(x1, x2, kw):
-    _test_tensordot(_array_module, x1, x2, kw)
+    _test_tensordot(xp, x1, x2, kw)
 
 @pytest.mark.unvectorized
 @pytest.mark.xp_extension('linalg')
@@ -957,7 +956,7 @@ def test_trace(x, kw):
         else:
             x_stack_diag = [x_stack[i - offset, i] for i in range(diag_size)]
         result = xp.asarray(xp.stack(x_stack_diag) if x_stack_diag else [], dtype=out_dtype)
-        return _array_module.sum(result, dtype=dtype)
+        return xp.sum(result, dtype=dtype)
 
 
     _test_stacks(linalg.trace, x, **kw, res=res, dims=0, true_val=true_trace)
@@ -1010,7 +1009,7 @@ def test_linalg_vecdot(x1, x2, data):
     data(),
 )
 def test_vecdot(x1, x2, data):
-    _test_vecdot(_array_module, x1, x2, data)
+    _test_vecdot(xp, x1, x2, data)
 
 
 @pytest.mark.xp_extension('linalg')
